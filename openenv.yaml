@@ -1,0 +1,131 @@
+name: supportopsenv
+version: 0.1.0
+description: OpenEnv benchmark for customer support operations triage and resolution
+
+# OpenEnv interface specification
+interface:
+  reset:
+    parameters:
+      task_id:
+        type: string
+        description: "Task ID: refund_triage, damaged_goods, or queue_priority"
+        default: "refund_triage"
+      seed:
+        type: integer
+        description: Random seed for reproducibility
+        default: 42
+    returns:
+      type: Observation
+  
+  step:
+    parameters:
+      action:
+        type: Action
+        description: Action to take in environment
+    returns:
+      type: StepResult
+  
+  state:
+    returns:
+      type: State
+
+# Action space
+action_space:
+  type: structured
+  actions:
+    - classify_ticket
+    - lookup_policy
+    - lookup_order
+    - lookup_account
+    - ask_customer
+    - draft_response
+    - escalate
+    - resolve
+
+# Observation space
+observation_space:
+  task_id: string
+  task_description: string
+  tickets: array[Ticket]
+  retrieved_records: object
+  action_history: array[ActionSummary]
+  step_count: integer
+  max_steps: integer
+  summary_text: string
+
+# Tasks
+tasks:
+  - id: refund_triage
+    difficulty: easy
+    description: "Triage a single refund ticket. Classify, lookup policy, check order, resolve."
+    max_steps: 10
+    expected_score_range: [0.7, 0.8]
+  
+  - id: damaged_goods
+    difficulty: medium
+    description: "Handle damaged goods case. Classify, request evidence, lookup policy, escalate."
+    max_steps: 15
+    expected_score_range: [0.4, 0.6]
+  
+  - id: queue_priority
+    difficulty: hard
+    description: "Prioritize and resolve 5-ticket queue. Handle VIP and fraud cases, complete 3+."
+    max_steps: 20
+    expected_score_range: [0.2, 0.4]
+
+# Reward specification
+reward:
+  type: shaped_trajectory
+  structure:
+    - type: per_step
+      components:
+        correct_classification: 0.15
+        relevant_lookup: 0.15
+        appropriate_ask: 0.10
+        redundant_lookup: -0.10
+        policy_violation: -0.25
+    - type: final
+      grader_score: 1.00
+
+# Server
+server:
+  type: fastapi
+  port: 7860
+  endpoints:
+    - method: POST
+      path: /reset
+      name: reset
+      description: Reset environment
+    - method: POST
+      path: /step
+      name: step
+      description: Execute action
+    - method: GET
+      path: /state
+      name: state
+      description: Get current state
+    - method: GET
+      path: /health
+      name: health
+      description: Health check
+
+# Environment tags
+tags:
+  - openenv
+  - benchmark
+  - support-operations
+  - multi-task
+  - deterministic-grading
+
+# Repository info
+repository:
+  type: github
+  url: https://github.com/openenv8/supportopsenv
+
+# Authors
+authors:
+  - name: OpenEnv Community
+    email: support@openenv.dev
+
+# License
+license: MIT

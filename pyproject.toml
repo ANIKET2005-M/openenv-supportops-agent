@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "supportopsenv"
+version = "0.1.0"
+description = "OpenEnv benchmark for customer support operations"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    {name = "OpenEnv Community", email = "support@openenv.dev"}
+]
+keywords = ["openenv", "benchmark", "reinforcement-learning", "support-operations"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "pydantic>=2.0",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "isort>=5.0",
+    "mypy>=1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/openenv8/supportopsenv"
+Documentation = "https://github.com/openenv8/supportopsenv#readme"
+Repository = "https://github.com/openenv8/supportopsenv.git"
+Issues = "https://github.com/openenv8/supportopsenv/issues"
+
+[tool.setuptools]
+packages = ["supportopsenv"]
+
+[tool.setuptools.package-data]
+supportopsenv = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
