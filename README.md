@@ -1,3 +1,13 @@
+---
+title: OpenEnv SupportOps Agent
+emoji: 🤖
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_file: app.py
+pinned: false
+---
+
 # SupportOpsEnv
 
 OpenEnv benchmark for customer support operations.
