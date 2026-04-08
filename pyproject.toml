@@ -28,6 +28,7 @@ dependencies = [
     "uvicorn[standard]>=0.23.0",
     "huggingface-hub>=0.17.0",
     "python-dotenv>=1.0.0",
+    "openenv>=0.1.0"
 ]
 
 [project.optional-dependencies]
@@ -64,3 +65,6 @@ python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
+
+[project.scripts]
+server = "server.app:main"
