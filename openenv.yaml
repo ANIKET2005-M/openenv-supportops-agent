@@ -70,7 +70,7 @@ tasks:
   - id: queue_priority
     difficulty: hard
     description: "Prioritize and resolve 5-ticket queue. Handle VIP and fraud cases, complete 3+."
-    max_steps: 20
+    max_steps: 3
     expected_score_range: [0.2, 0.4]
 
 # Reward specification

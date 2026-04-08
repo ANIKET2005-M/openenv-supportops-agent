@@ -4,16 +4,28 @@ import os
 import json
 import sys
 from typing import List, Optional
+from dotenv import load_dotenv
+from huggingface_hub import InferenceClient
 
 from supportopsenv import SupportOpsEnv, Action
 
+# Load environment variables from .env
+load_dotenv()
+
 
 class BaselineAgent:
-    """Simple baseline agent for SupportOpsEnv."""
+    """LLM-based baseline agent for SupportOpsEnv using Hugging Face Inference API."""
     
-    def __init__(self, model_name: str = "gpt-4o"):
+    def __init__(self, model_name: str = "meta-llama/Llama-3-8b-Instruct"):
         self.model_name = model_name
+        # Initialize Hugging Face Inference client with HF_TOKEN
+        hf_token = os.getenv("HF_TOKEN")
+        if not hf_token:
+            raise ValueError("HF_TOKEN environment variable is required")
+        
+        self.client = InferenceClient(api_key=hf_token)
         self.env = SupportOpsEnv()
+        self.last_error = None  # Track last API error for reporting
     
     def run_episode(self, task_id: str = "refund_triage", seed: int = 42) -> dict:
         """
@@ -43,8 +55,8 @@ class BaselineAgent:
         while not done and steps < observation.max_steps:
             steps += 1
             
-            # Select action based on simple heuristic policy
-            action = self._select_action(observation, steps)
+            # Select action based on LLM policy
+            action = self._select_action(observation)
             
             # Execute action
             try:
@@ -56,9 +68,9 @@ class BaselineAgent:
                 
                 step_rewards.append(reward)
                 
-                # Emit STEP
+                # Emit STEP with error tracking
                 action_str = self._format_action(action)
-                error_str = "null"
+                error_str = self.last_error if self.last_error else "null"
                 print(f"[STEP] step={steps} action={action_str} reward={reward:.2f} done={str(done).lower()} error={error_str}")
                 sys.stdout.flush()
                 
@@ -75,10 +87,8 @@ class BaselineAgent:
         else:
             final_score = 0.0
         
-        # Format rewards
+        # Format rewards (step rewards only, not final grader score)
         rewards_str = ",".join(f"{r:.2f}" for r in step_rewards)
-        if final_score > 0:
-            rewards_str += f",{final_score:.2f}"
         
         # Emit END
         print(f"[END] success={str(success).lower()} steps={steps} score={final_score:.3f} rewards={rewards_str}")
@@ -93,106 +103,126 @@ class BaselineAgent:
             "total_return": sum(step_rewards) + final_score,
         }
     
-    def _select_action(self, observation, step: int) -> Action:
-        """Select action using simple heuristic policy."""
+    def _select_action(self, observation) -> Action:
+        """Select action using Hugging Face LLM."""
         
-        task_id = observation.task_id
+        # Build prompt
+        prompt = self._build_prompt(observation)
+        
+        # Call Hugging Face Inference API
+        try:
+            response = self.client.text_generation(
+                prompt,
+                model=self.model_name,
+                max_new_tokens=200,
+                temperature=0.1,  # Low temperature for deterministic actions
+            )
+            
+            action_text = response.strip()
+            self.last_error = None  # Clear error on success
+            return self._parse_action(action_text, observation)
+            
+        except Exception as e:
+            # Capture error for logging + fallback to heuristic
+            self.last_error = "api_error"  # Simple error indicator
+            print(f"HF API error: {e}", file=sys.stderr)
+            return self._heuristic_fallback(observation)
+    
+    def _build_prompt(self, observation) -> str:
+        """Build prompt for LLM."""
+        prompt = f"""
+You are handling customer support tickets. Your task: {observation.task_description}
+
+Current tickets:
+"""
+        for ticket in observation.tickets:
+            prompt += f"- Ticket {ticket.id}: {ticket.description} (Status: {ticket.status})\n"
+        
+        if observation.retrieved_records:
+            prompt += "\nRetrieved information:\n"
+            for key, value in observation.retrieved_records.items():
+                prompt += f"- {key}: {value}\n"
+        
+        if observation.action_history:
+            prompt += "\nPrevious actions:\n"
+            for action in observation.action_history[-3:]:  # Last 3 actions
+                prompt += f"- {action.action_type} on ticket {action.ticket_id}: reward {action.reward}\n"
+        
+        prompt += f"""
+Step {observation.step_count + 1} of {observation.max_steps}
+
+Available actions:
+- classify_ticket: Categorize ticket (arguments: category)
+- lookup_policy: Get policy info (arguments: topic)
+- lookup_order: Check order details (arguments: order_id)
+- lookup_account: Check customer account (arguments: customer_id)
+- ask_customer: Request info from customer (arguments: question)
+- draft_response: Draft response message (arguments: message)
+- escalate: Escalate to specialist (arguments: reason)
+- resolve: Close ticket (arguments: decision or resolution)
+
+Choose the best action. Respond with JSON format:
+{{"action_type": "action_name", "ticket_id": ticket_number, "arguments": {{"key": "value"}}}}
+"""
+        return prompt
+    
+    def _parse_action(self, action_text: str, observation) -> Action:
+        """Parse LLM response into Action."""
+        try:
+            # Try to parse as JSON
+            action_data = json.loads(action_text)
+            return Action(
+                action_type=action_data["action_type"],
+                ticket_id=action_data.get("ticket_id", observation.tickets[0].id if observation.tickets else 1),
+                arguments=action_data.get("arguments", {})
+            )
+        except json.JSONDecodeError:
+            # Fallback: extract from text
+            action_type = "resolve"  # default
+            ticket_id = observation.tickets[0].id if observation.tickets else 1
+            arguments = {}
+            
+            # Simple parsing
+            if "classify_ticket" in action_text:
+                action_type = "classify_ticket"
+                if "refund" in action_text:
+                    arguments = {"category": "refund"}
+                elif "replacement" in action_text:
+                    arguments = {"category": "replacement"}
+            elif "lookup_policy" in action_text:
+                action_type = "lookup_policy"
+                arguments = {"topic": "refunds"}
+            elif "lookup_order" in action_text:
+                action_type = "lookup_order"
+                arguments = {"order_id": observation.tickets[0].order_id if observation.tickets else None}
+            elif "ask_customer" in action_text:
+                action_type = "ask_customer"
+                arguments = {"question": "Please provide more details"}
+            elif "resolve" in action_text:
+                action_type = "resolve"
+                arguments = {"decision": "approved"}
+            
+            return Action(action_type=action_type, ticket_id=ticket_id, arguments=arguments)
+    
+    def _heuristic_fallback(self, observation) -> Action:
+        """Simple heuristic fallback when API fails."""
         tickets = observation.tickets
-        
         if not tickets:
             return Action(action_type="resolve", ticket_id=1, arguments={})
         
-        ticket = tickets[0]  # Focus on first ticket
+        ticket = tickets[0]
+        step = observation.step_count + 1
         
-        # Policy-based action selection
-        if task_id == "refund_triage":
+        if observation.task_id == "refund_triage":
             if step == 1:
-                return Action(
-                    action_type="classify_ticket",
-                    ticket_id=ticket.id,
-                    arguments={"category": "refund"}
-                )
+                return Action(action_type="classify_ticket", ticket_id=ticket.id, arguments={"category": "refund"})
             elif step == 2:
-                return Action(
-                    action_type="lookup_policy",
-                    ticket_id=ticket.id,
-                    arguments={"topic": "refunds"}
-                )
-            elif step == 3:
-                return Action(
-                    action_type="lookup_order",
-                    ticket_id=ticket.id,
-                    arguments={"order_id": ticket.order_id}
-                )
+                return Action(action_type="lookup_policy", ticket_id=ticket.id, arguments={"topic": "refunds"})
             else:
-                return Action(
-                    action_type="resolve",
-                    ticket_id=ticket.id,
-                    arguments={"decision": "approve"}
-                )
+                return Action(action_type="resolve", ticket_id=ticket.id, arguments={"decision": "approve"})
         
-        elif task_id == "damaged_goods":
-            if step == 1:
-                return Action(
-                    action_type="classify_ticket",
-                    ticket_id=ticket.id,
-                    arguments={"category": "replacement"}
-                )
-            elif step == 2:
-                return Action(
-                    action_type="ask_customer",
-                    ticket_id=ticket.id,
-                    arguments={"question": "Can you provide photos of damage?"}
-                )
-            elif step == 3:
-                return Action(
-                    action_type="lookup_policy",
-                    ticket_id=ticket.id,
-                    arguments={"topic": "damaged_goods"}
-                )
-            else:
-                return Action(
-                    action_type="escalate",
-                    ticket_id=ticket.id,
-                    arguments={"reason": "damage_claim"}
-                )
-        
-        elif task_id == "queue_priority":
-            # Simple priority ordering: VIP first (ids 3,6), then fraud (id 4)
-            open_tickets = [t for t in tickets if t.status == "open"]
-            
-            if not open_tickets:
-                return Action(action_type="resolve", ticket_id=1, arguments={})
-            
-            # Sort by priority
-            priority_map = {3: 0, 6: 1, 4: 2}  # VIP, VIP, Fraud
-            priority_ticket = min(open_tickets, key=lambda t: priority_map.get(t.id, 3))
-            
-            if step % 3 == 1:
-                return Action(
-                    action_type="lookup_account",
-                    ticket_id=priority_ticket.id,
-                    arguments={"customer_id": priority_ticket.customer_id}
-                )
-            elif step % 3 == 2:
-                return Action(
-                    action_type="classify_ticket",
-                    ticket_id=priority_ticket.id,
-                    arguments={"category": "priority_handling"}
-                )
-            else:
-                return Action(
-                    action_type="resolve",
-                    ticket_id=priority_ticket.id,
-                    arguments={"resolution": "handled"}
-                )
-        
-        # Default action
-        return Action(
-            action_type="resolve",
-            ticket_id=ticket.id if ticket else 1,
-            arguments={}
-        )
+        # Default
+        return Action(action_type="resolve", ticket_id=ticket.id, arguments={})
     
     def _format_action(self, action: Action) -> str:
         """Format action for STEP output."""
@@ -204,13 +234,12 @@ class BaselineAgent:
 
 def main():
     """Run baseline inference."""
-    # Get environment variables
-    api_key = os.getenv("OPENAI_API_KEY", "")
-    model_name = os.getenv("MODEL_NAME", "gpt-4o")
+    # Get environment variables from .env
+    model_name = os.getenv("MODEL_NAME", "meta-llama/Llama-3-8b-Instruct")
     task_id = os.getenv("TASK_ID", "refund_triage")
     seed = int(os.getenv("SEED", "42"))
     
-    # Create and run agent
+    # Create and run agent (HF_TOKEN is checked in __init__)
     agent = BaselineAgent(model_name=model_name)
     
     try:

@@ -157,7 +157,7 @@ class SupportOpsEnv:
                     escalated=False,
                 ),
             ]
-            max_steps = 20
+            max_steps = 3
         else:
             raise ValueError(f"Unknown task_id: {task_id}")
         

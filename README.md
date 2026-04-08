@@ -1,53 +1,68 @@
-# SupportOpsEnv - Customer Support Operations Benchmark
+# SupportOpsEnv
 
-[![OpenEnv](https://img.shields.io/badge/OpenEnv-Benchmark-blue)](https://github.com/openenv8/openenv)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-brightgreen)](https://www.python.org)
-[![Pydantic v2](https://img.shields.io/badge/pydantic-v2-blue)](https://docs.pydantic.dev)
-[![FastAPI](https://img.shields.io/badge/fastapi-0.100+-green)](https://fastapi.tiangolo.com)
-[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+OpenEnv benchmark for customer support operations.
 
-## Overview
-
-**SupportOpsEnv** is the first standardized OpenEnv benchmark for production customer support operations. It simulates real human workflows combining classification, policy lookup, evidence handling, escalation decisions, and resolution under business constraints.
-
-**Why it matters:** Companies spend billions on support operations. Agent performance here directly translates to ROI through faster resolution times, improved customer satisfaction, and reduced operational costs.
-
-## Quick Start
-
-### Installation
+## Installation
 
 ```bash
-# Clone repository
-git clone https://github.com/openenv8/supportopsenv.git
-cd supportopsenv
-
-# Install package with dependencies
 pip install -e .
 ```
 
-### Basic Usage
+## Quick Start
 
 ```python
-from supportopsenv import SupportOpsEnv, Action
+from supportopsenv import SupportOpsEnv
 
-# Create environment
 env = SupportOpsEnv()
-
-# Reset for specific task
-observation = env.reset(task_id="refund_triage", seed=42)
-
-# Take action
-action = Action(
-    action_type="classify_ticket",
-    ticket_id=1,
-    arguments={"category": "refund"}
-)
+obs = env.reset(task_id="refund_triage", seed=42)
 result = env.step(action)
+```
 
-# Access results
-print(f"Reward: {result.reward}")
-print(f"Done: {result.done}")
-print(f"Score: {result.info['grader_score']}")
+## Tasks
+
+- **refund_triage** (Easy): Classify and route customer refund requests
+- **damaged_goods** (Medium): Handle damaged product scenarios  
+- **queue_priority** (Hard): Prioritize support queue under constraints
+
+## Environment
+
+Set `HF_TOKEN` in `.env` file for API access.
+
+## Deployment
+
+### Hugging Face Spaces
+
+Deploy as a containerized Hugging Face Space with tag `openenv`:
+
+1. Create a new Space on [Hugging Face](https://huggingface.co/spaces)
+2. Select "Docker" as the Space SDK
+3. Upload this repository to your Space
+4. Add `HF_TOKEN` secret in Space settings
+5. Space runs on port 7860 automatically
+
+**API Usage** (once deployed):
+
+```bash
+# Health check
+curl https://your-username-supportopsenv.hf.space/health
+
+# Reset environment
+curl -X POST https://your-username-supportopsenv.hf.space/reset \
+  -H "Content-Type: application/json" \
+  -d '{"task_id": "refund_triage", "seed": 42}'
+
+# Execute action
+curl -X POST https://your-username-supportopsenv.hf.space/step \
+  -H "Content-Type: application/json" \
+  -d '{"action": {"action_type": "classify_ticket", "ticket_id": 1, "arguments": {"category": "refund"}}}'
+```
+
+### Local Docker
+
+```bash
+docker build -t supportopsenv:openenv .
+docker run -p 7860:7860 -e HF_TOKEN=$HF_TOKEN supportopsenv:openenv
+```
 ```
 
 ### Run Baseline Inference
@@ -57,7 +72,7 @@ print(f"Score: {result.info['grader_score']}")
 python inference.py
 
 # Output format:
-# [START] task=refund_triage env=supportops model=gpt-4o
+# [START] task=refund_triage env=supportops model=meta-llama/Llama-3-8b-Instruct
 # [STEP] step=1 action=classify(category=refund) reward=0.15 done=false error=null
 # [STEP] step=2 action=lookup_policy(topic=refunds) reward=0.15 done=false error=null
 # ...
@@ -209,7 +224,7 @@ Observation(
 - Ticket 4: Fraud risk (suspicious account)
 - Tickets 5, 7: Standard priority
 
-**Goal:** Resolve 3+ tickets in 20 steps, prioritizing VIP and fraud cases
+**Goal:** Resolve 3+ tickets in 3 steps, prioritizing VIP and fraud cases
 
 **Grading:** Resolved tickets (0.4) + VIP prioritization (0.3) + Fraud handling (0.3)
 
@@ -329,8 +344,8 @@ print(results)
 ## Configuration
 
 ### Environment Variables
-- `OPENAI_API_KEY`: API authentication (if using LLM baseline)
-- `MODEL_NAME`: Model to use in inference (default: "gpt-4o")
+- `HF_TOKEN`: Hugging Face API token (required for inference)
+- `MODEL_NAME`: Model to use in inference (default: "meta-llama/Llama-3-8b-Instruct")
 - `TASK_ID`: Task to run (default: "refund_triage")
 - `SEED`: Random seed (default: 42)
 
@@ -343,8 +358,8 @@ services:
     ports:
       - "7860:7860"
     environment:
-      - MODEL_NAME=gpt-4o
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MODEL_NAME=meta-llama/Llama-3-8b-Instruct
+      - HF_TOKEN=${HF_TOKEN}
 ```
 
 ## Performance Notes
