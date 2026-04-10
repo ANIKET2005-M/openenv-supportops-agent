@@ -17,6 +17,7 @@ COPY . /app/
 # Install Python dependencies
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -e .
+    RUN pip install -r requirements.txt
 
 # Expose port for FastAPI server
 EXPOSE 7860
