@@ -12,6 +12,7 @@ from supportopsenv.models import (
 )
 from supportopsenv.reward import calculate_final_reward
 from supportopsenv.tasks import TASKS  # ✅ IMPORTANT
+from supportopsenv.graders import grade_task
 
 
 class SupportOpsEnv:
@@ -103,5 +104,5 @@ class SupportOpsEnv:
 
     # ✅ FIXED GRADER
     def _grade_episode(self) -> float:
-        grader = self.tasks[self.state.task_id]["grader"]
-        return grader(self.state)
+        result = grade_task(self.state)
+        return result["score"]
