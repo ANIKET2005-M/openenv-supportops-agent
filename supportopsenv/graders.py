@@ -50,7 +50,8 @@ def grade_refund_triage(state: State) -> float:
         score += 0.1
     
     # Ensure [0, 1] range
-    return min(1.0, max(0.0, score))
+    score = min(0.99, max(0.01, score))
+    return score
 
 
 def grade_damaged_goods(state: State) -> float:
@@ -95,7 +96,8 @@ def grade_damaged_goods(state: State) -> float:
         score += 0.15
     
     # Ensure [0, 1] range
-    return min(1.0, max(0.0, score))
+    score = min(0.99, max(0.01, score))
+    return score
 
 
 def grade_queue_priority(state: State) -> float:
@@ -140,7 +142,8 @@ def grade_queue_priority(state: State) -> float:
             score += 0.15
     
     # Ensure [0, 1] range
-    return min(1.0, max(0.0, score))
+    score = min(0.99, max(0.01, score))
+    return score
 
 
 def grade_task(state: State) -> Dict[str, float]:
