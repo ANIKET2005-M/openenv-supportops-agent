@@ -57,7 +57,32 @@ QUEUE_PRIORITY_TASK = {
     "difficulty": "hard",
     "description": "Queue priority task",
     "max_steps": 20,
-    "initial_tickets": [],
+    "initial_tickets": [
+        Ticket(
+            id=3,
+            category=None,
+            priority=None,
+            status="open",
+            customer_id=201,
+            order_id=2001,
+            description="VIP customer issue",
+            has_evidence=False,
+            resolved=False,
+            escalated=False,
+        ),
+        Ticket(
+            id=4,
+            category=None,
+            priority=None,
+            status="open",
+            customer_id=202,
+            order_id=2002,
+            description="Fraud suspicion",
+            has_evidence=False,
+            resolved=False,
+            escalated=False,
+        ),
+    ],
 }
 
 # ---------------- VALIDATOR REQUIRED ---------------- #
